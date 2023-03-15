@@ -4,23 +4,34 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import com.example.crm.domain.Address;
 import com.example.crm.domain.CustomerDocument;
+import com.example.crm.event.CustomerAddressChangedEvent;
 import com.example.crm.repository.CustomerDocumentRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 public class CustomerService {
 	private final CustomerDocumentRepository custRepo;
 	private final KafkaTemplate<String,String> kafkaTemplate;
+	private final String customerEventTopic;
+	private final ObjectMapper objectMapper;
 	
-	public CustomerService(CustomerDocumentRepository custRepo, KafkaTemplate<String, String> kafkaTemplate) {
+	public CustomerService(CustomerDocumentRepository custRepo, 
+			KafkaTemplate<String, String> kafkaTemplate,
+			ObjectMapper objectMapper,
+			@Value("${customerEventTopic}") String customerEventTopic) {
 		this.custRepo = custRepo;
 		this.kafkaTemplate = kafkaTemplate;
+		this.customerEventTopic = customerEventTopic;
+		this.objectMapper = objectMapper;
 	}
 
 	public List<CustomerDocument> findAll(int pageNo, int pageSize) {
@@ -43,24 +54,37 @@ public class CustomerService {
 			var fieldName = entry.getKey();
 			switch(fieldName) {
 				case "addresses" -> {
-					var rawAddresses = (List<LinkedHashMap<String,Object>>) entry.getValue();
-					var addresses = new ArrayList<Address>();
-					for (LinkedHashMap<String,Object> rawAddress : rawAddresses) {
-						var address = new Address();
-						address.setAddressId(rawAddress.get("addressId").toString());
-						address.setCity(rawAddress.get("city").toString());
-						address.setCountry(rawAddress.get("country").toString());
-						address.setStreet(rawAddress.get("street").toString());
-						address.setZipCode(rawAddress.get("zipCode").toString());
-						addresses.add(address);
+					try {
+						var newAddresses = extractAddresses(entry);
+						var oldAddresses = customer.getAddresses();
+						customer.setAddresses(newAddresses);
+						var event = new CustomerAddressChangedEvent(identity,oldAddresses,newAddresses);
+						var eventAsJson = objectMapper.writeValueAsString(event); 
+						kafkaTemplate.send(customerEventTopic,eventAsJson)
+						             .addCallback(System.out::println,System.err::println);
+					}catch (Exception e) {
+						System.err.println("Error has occurred while converting to json: %s".formatted(e.getMessage()));
 					}
-					//TODO: for each address emit an event!
-					customer.setAddresses(addresses);
 				}
 			}
 		});
 		custRepo.save(customer);
 		return customer;
+	}
+
+	private ArrayList<Address> extractAddresses(Entry<String, Object> entry) {
+		var rawAddresses = (List<LinkedHashMap<String,Object>>) entry.getValue();
+		var addresses = new ArrayList<Address>();
+		for (LinkedHashMap<String,Object> rawAddress : rawAddresses) {
+			var address = new Address();
+			address.setAddressId(rawAddress.get("addressId").toString());
+			address.setCity(rawAddress.get("city").toString());
+			address.setCountry(rawAddress.get("country").toString());
+			address.setStreet(rawAddress.get("street").toString());
+			address.setZipCode(rawAddress.get("zipCode").toString());
+			addresses.add(address);
+		}
+		return addresses;
 	}
 
 }
