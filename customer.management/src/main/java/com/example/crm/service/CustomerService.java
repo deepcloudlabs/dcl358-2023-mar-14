@@ -20,18 +20,17 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 @Service
 public class CustomerService {
 	private final CustomerDocumentRepository custRepo;
-	private final KafkaTemplate<String,String> kafkaTemplate;
-	private final String customerEventTopic;
+	private final String customerEventTopic= "crm-events";
 	private final ObjectMapper objectMapper;
+	private final MessagingService messagingService;
 	
 	public CustomerService(CustomerDocumentRepository custRepo, 
-			KafkaTemplate<String, String> kafkaTemplate,
-			ObjectMapper objectMapper,
-			@Value("${customerEventTopic}") String customerEventTopic) {
+			MessagingService messagingService,
+			ObjectMapper objectMapper) {
 		this.custRepo = custRepo;
-		this.kafkaTemplate = kafkaTemplate;
-		this.customerEventTopic = customerEventTopic;
+		this.messagingService = messagingService;
 		this.objectMapper = objectMapper;
+		System.err.println(this.messagingService.getClass().getName());
 	}
 
 	public List<CustomerDocument> findAll(int pageNo, int pageSize) {
@@ -60,11 +59,10 @@ public class CustomerService {
 						customer.setAddresses(newAddresses);
 						var event = new CustomerAddressChangedEvent(identity,oldAddresses,newAddresses);
 						var eventAsJson = objectMapper.writeValueAsString(event); 
-						kafkaTemplate.send(customerEventTopic,eventAsJson)
-						             .addCallback(System.out::println,System.err::println);
-					}catch (Exception e) {
+						messagingService.sendMessage(customerEventTopic,eventAsJson);
+					}catch (Throwable e) {
 						System.err.println("Error has occurred while converting to json: %s".formatted(e.getMessage()));
-					}
+					} 
 				}
 			}
 		});
