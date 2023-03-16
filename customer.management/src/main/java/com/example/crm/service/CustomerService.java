@@ -6,9 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import com.example.crm.domain.Address;
@@ -46,7 +44,6 @@ public class CustomerService {
 		return custRepo.insert(customer);
 	}
 
-	@SuppressWarnings("unchecked")
 	public CustomerDocument patchCustomer(String identity, Map<String, Object> changes) {
 		var customer = custRepo.findById(identity).orElseThrow(() -> new IllegalArgumentException("Cannot find customer."));
 		changes.entrySet().forEach(entry -> {
@@ -70,6 +67,7 @@ public class CustomerService {
 		return customer;
 	}
 
+	@SuppressWarnings("unchecked")
 	private ArrayList<Address> extractAddresses(Entry<String, Object> entry) {
 		var rawAddresses = (List<LinkedHashMap<String,Object>>) entry.getValue();
 		var addresses = new ArrayList<Address>();
