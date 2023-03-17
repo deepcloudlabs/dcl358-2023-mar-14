@@ -4,7 +4,7 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 
 @Service
-public class InsuranceRequotingService {
+public class InsuranceRequotingKafkaService {
 
 	@KafkaListener(topics="${customerEventTopic}")
 	public void listenCustomerEvents(String event) {
